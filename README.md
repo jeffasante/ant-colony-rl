@@ -97,6 +97,7 @@ This simulation serves as an educational tool to demonstrate:
 This Ant Colony Reinforcement Learning simulation provides an engaging and interactive way to explore the principles of machine learning and swarm intelligence, offering insights into both artificial intelligence and biological systems.
 
 ## Demo
-Experience the simulation firsthand: [Ant Colony RL Demo](https://jeffasante.github.io/ant-colony-rl/)
+Experience the simulation firsthand: <a href="https://jeffasante.github.io/ant-colony-rl/" target="_blank">Ant Colony RL Demo</a>
+
 
 This Ant Colony Reinforcement Learning simulation provides an engaging and interactive way to explore the principles of machine learning and swarm intelligence, offering insights into both artificial intelligence and biological systems.
