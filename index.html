@@ -133,6 +133,20 @@
             }
 
             train(state, action, reward, nextState, done) {
+                /*
+                    Q-Learning algorithm
+            
+                    Q(s,a) = (1 - 𝛼 ) * (s′,a′)− + 𝛼 * ( r + 𝛾  * max(Q(s,a)))
+                    where,
+                        s is the current state.
+                        a is the action taken.
+                        r is the reward received after taking action a in state s.
+                        s′ is the new state after action.
+                        a′ is any possible action from the new state s′.
+                        𝛼 is the learning rate (0 < α ≤ 1).
+                        𝛾 is the discount factor (0 ≤ γ < 1).
+                */           
+
                 if (!this.qTable[state] || !this.qTable[nextState]) {
                     console.error(`Invalid state encountered: ${state} or ${nextState} is undefined.`);
                     return;
@@ -420,10 +434,6 @@
             setTimeout(simulationStep, 1000 / FPS);
         }
 
-        // function startSimulation() {
-        //     resizeCanvas();
-        //     simulationStep();
-        // }
 
         // Modify the startSimulation function
         async function startSimulation() {
@@ -485,7 +495,6 @@
             setTimeout(simulationStep, 1000 / FPS);
         }
 
-        // Remove the duplicate startSimulation call
         window.addEventListener('resize', resizeCanvas);
         startSimulation();
     </script>
