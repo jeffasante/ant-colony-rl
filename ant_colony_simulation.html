@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ant Colony Simulation with Q-Learning</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            background-color: black;
+        }
+
+        #simulationContainer {
+            display: flex;
+            flex-wrap: wrap;
+            height: 100%;
+            width: 100%;
+        }
+
+        #canvasContainer {
+            flex: 3;
+            min-width: 300px;
+            height: 100%;
+        }
+
+        #sidePanel {
+            flex: 1;
+            min-width: 200px;
+            background-color: #f0f0f0;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #scoreboard,
+        #graph {
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="simulationContainer">
+        <div id="canvasContainer">
+            <canvas id="simulationCanvas"></canvas>
+        </div>
+        <div id="sidePanel">
+            <div id="scoreboard">
+                <h2>Scoreboard</h2>
+                <p>Episode: <span id="episode">1</span></p>
+                <p>Step: <span id="step">0</span></p>
+                <p>Total Food Collected: <span id="totalFood">0</span></p>
+                <p>Total Reward: <span id="totalReward">0</span></p>
+                <p>Exploration Rate: <span id="explorationRate">1.00</span></p>
+            </div>
+            <div id="graph">
+                <h2>Food Amount Graph</h2>
+                <canvas id="graphCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Constants and Initialization
+        const GRID_SIZE = 20;
+        const ANT_COUNT = 10;
+        const FOOD_SOURCES = 3;
+        const MAX_FOOD = 5;
+        const PHEROMONE_STRENGTH = 0.3;
+        const PHEROMONE_EVAPORATION = 0.95;
+        const PHEROMONE_THRESHOLD = 0.01;
+        const FPS = 20;
+
+        const COLORS = {
+            BLACK: "#000000",
+            WHITE: "#FFFFFF",
+            RED: "#FF3232",
+            BLUE: "#3232FF",
+            GREEN: "#32FF32",
+            BROWN: "#A52A2A",
+            PURPLE: "#800080",
+            FOOD_COLORS: ["#00FF00", "#FFFF00", "#00FFFF"]
+        };
+
+
+        // Load the Q-table from the JSON file
+        let path_json = 'ant_colony_q_table_50episodes.json'; // 'ant_colony_q_table.json'
+        async function loadQTable() {
+            const response = await fetch(path_json);
+            const qTable = await response.json();
+            return qTable;
+        }
+
+        // Make sure to declare colony as a global variable
+        let colony;
+
+        class AntAgent {
+            constructor(qTable, actionSize, learningRate = 0.1, discountFactor = 0.95, explorationRate = 1.0, explorationDecay = 0.995) {
+                this.qTable = qTable;
+                this.actionSize = actionSize;
+                this.learningRate = learningRate;
+                this.discountFactor = discountFactor;
+                this.explorationRate = explorationRate;
+                this.explorationMin = 0.01;
+                this.explorationDecay = explorationDecay;
+                this.totalReward = 0;
+            }
+
+
+            getAction(state) {
+                if (Math.random() < this.explorationRate) {
+                    return Math.floor(Math.random() * this.actionSize);
+                }
+                if (this.qTable[state] === undefined) {
+                    console.error(`State ${state} is out of bounds in Q-table!`);
+                }
+                return this.qTable[state].indexOf(Math.max(...this.qTable[state]));
+            }
+
+            train(state, action, reward, nextState, done) {
+                if (!this.qTable[state] || !this.qTable[nextState]) {
+                    console.error(`Invalid state encountered: ${state} or ${nextState} is undefined.`);
+                    return;
+                }
+
+                const currentQ = this.qTable[state][action];
+                const maxFutureQ = done ? 0 : Math.max(...this.qTable[nextState]);
+                const newQ = (1 - this.learningRate) * currentQ + this.learningRate * (reward + this.discountFactor * maxFutureQ);
+                this.qTable[state][action] = newQ;
+                this.totalReward += reward;
+
+                if (done) {
+                    this.explorationRate = Math.max(this.explorationMin, this.explorationRate * this.explorationDecay);
+                }
+            }
+        }
+
+        function stateToIndex(grid, antX, antY, hasFood) {
+            const surroundings = [
+                grid[Math.max(0, antX - 1)][Math.max(0, antY - 1)],
+                grid[Math.max(0, antX - 1)][antY],
+                grid[Math.max(0, antX - 1)][Math.min(GRID_SIZE - 1, antY + 1)],
+                grid[antX][Math.max(0, antY - 1)],
+                grid[antX][antY],
+                grid[antX][Math.min(GRID_SIZE - 1, antY + 1)],
+                grid[Math.min(GRID_SIZE - 1, antX + 1)][Math.max(0, antY - 1)],
+                grid[Math.min(GRID_SIZE - 1, antX + 1)][antY],
+                grid[Math.min(GRID_SIZE - 1, antX + 1)][Math.min(GRID_SIZE - 1, antY + 1)]
+            ];
+            const mappedSurroundings = surroundings.map(x => x > 0 ? 1 : (x < 0 ? 2 : 0));
+            let stateIndex = mappedSurroundings.reduce((acc, val, i) => acc + val * Math.pow(3, i), 0);
+            stateIndex = stateIndex * 2 + (hasFood ? 1 : 0);
+            return stateIndex % 3200;
+        }
+
+        class Ant {
+            constructor(x, y, agent) {
+                this.x = x;
+                this.y = y;
+                this.hasFood = false;
+                this.agent = agent;
+            }
+
+            move(grid, pheromone) {
+                const state = stateToIndex(grid, this.x, this.y, this.hasFood);
+                const action = this.agent.getAction(state);
+
+                const directions = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+                const [dx, dy] = directions[action];
+
+                const newX = Math.max(0, Math.min(GRID_SIZE - 1, this.x + dx));
+                const newY = Math.max(0, Math.min(GRID_SIZE - 1, this.y + dy));
+
+                let reward = -0.1;
+                let done = false;
+
+                if (this.hasFood) {
+                    if (newX === Math.floor(GRID_SIZE / 2) && newY === Math.floor(GRID_SIZE / 2)) {
+                        reward = 10;
+                        this.hasFood = false;
+                        done = true;
+                    }
+                    pheromone[this.x][this.y] += PHEROMONE_STRENGTH;
+                } else if (grid[newX][newY] > 0) {
+                    reward = 5;
+                    this.hasFood = true;
+                    grid[newX][newY]--;
+                    console.log(`Ant collected food at (${newX}, ${newY}). Food left: ${grid[newX][newY]}`);
+                }
+
+                this.x = newX;
+                this.y = newY;
+
+                const newState = stateToIndex(grid, this.x, this.y, this.hasFood);
+                this.agent.train(state, action, reward, newState, done);
+
+                return [reward > 0, done];
+            }
+        }
+
+        class AntColony {
+            constructor(qTable) {
+                this.grid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+                this.pheromone = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+                this.agent = new AntAgent(qTable, 4);
+                this.ants = Array.from({ length: ANT_COUNT }, () => new Ant(Math.floor(GRID_SIZE / 2), Math.floor(GRID_SIZE / 2), this.agent));
+                this.foodSources = this.placeFood();
+                this.foodAmounts = Object.fromEntries(Array.from({ length: FOOD_SOURCES }, (_, i) => [i, MAX_FOOD]));
+            }
+
+            placeFood() {
+                const sources = [];
+                for (let i = 0; i < FOOD_SOURCES; i++) {
+                    while (true) {
+                        const x = Math.floor(Math.random() * GRID_SIZE);
+                        const y = Math.floor(Math.random() * GRID_SIZE);
+                        if (this.grid[x][y] === 0 && (x !== Math.floor(GRID_SIZE / 2) || y !== Math.floor(GRID_SIZE / 2))) {
+                            this.grid[x][y] = MAX_FOOD;
+                            sources.push([x, y, i]);
+                            break;
+                        }
+                    }
+                }
+                return sources;
+            }
+
+            resetFoodLocations() {
+                for (const [x, y] of this.foodSources) {
+                    this.grid[x][y] = 0;
+                }
+                this.foodSources = this.placeFood();
+                this.foodAmounts = Object.fromEntries(Array.from({ length: FOOD_SOURCES }, (_, i) => [i, MAX_FOOD]));
+            }
+
+            update() {
+                const foodCollected = Array(FOOD_SOURCES).fill(0);
+                for (const ant of this.ants) {
+                    const [collected, done] = ant.move(this.grid, this.pheromone);
+                    if (collected) {
+                        for (let i = 0; i < this.foodSources.length; i++) {
+                            const [x, y] = this.foodSources[i];
+                            if (ant.x === x && ant.y === y) {
+                                foodCollected[i]++;
+                                console.log(`Food source ${i} at (${x}, ${y}) was collected. Food remaining: ${this.grid[x][y]}`);
+                                break;
+                            }
+                        }
+                    }
+                    if (done) {
+                        ant.x = Math.floor(GRID_SIZE / 2);
+                        ant.y = Math.floor(GRID_SIZE / 2);
+                    }
+                }
+
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    for (let y = 0; y < GRID_SIZE; y++) {
+                        this.pheromone[x][y] *= PHEROMONE_EVAPORATION;
+                        if (this.pheromone[x][y] < PHEROMONE_THRESHOLD) {
+                            this.pheromone[x][y] = 0;
+                        }
+                    }
+                }
+
+                for (let i = 0; i < this.foodSources.length; i++) {
+                    const [x, y] = this.foodSources[i];
+                    this.foodAmounts[i] = this.grid[x][y];
+                }
+                console.log(`Food amounts after update: ${JSON.stringify(this.foodAmounts)}`);
+
+                return foodCollected;
+            }
+        }
+
+        // Simulation Logic
+        const simulationCanvas = document.getElementById('simulationCanvas');
+        const ctx = simulationCanvas.getContext('2d');
+        const graphCanvas = document.getElementById('graphCanvas');
+        const graphCtx = graphCanvas.getContext('2d');
+
+        colony = new AntColony();
+        let foodData = Array.from({ length: FOOD_SOURCES }, () => []);
+        let maxSteps = 2000;
+        let step = 0;
+        let episode = 1;
+        let totalFoodCollected = 0;
+
+        function resizeCanvas() {
+            simulationCanvas.width = simulationCanvas.clientWidth;
+            simulationCanvas.height = simulationCanvas.clientHeight;
+            graphCanvas.width = graphCanvas.clientWidth;
+            graphCanvas.height = 100;
+        }
+
+        function drawGrid() {
+            const cellSize = Math.min(simulationCanvas.width, simulationCanvas.height) / GRID_SIZE;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    const rect = [x * cellSize, y * cellSize, cellSize, cellSize];
+                    if (colony.grid[x][y] > 0) {
+                        for (let i = 0; i < colony.foodSources.length; i++) {
+                            const [fx, fy] = colony.foodSources[i];
+                            if (x === fx && y === fy) {
+                                ctx.fillStyle = COLORS.FOOD_COLORS[i];
+                                ctx.fillRect(...rect);
+                                break;
+                            }
+                        }
+                    } else if (x === Math.floor(GRID_SIZE / 2) && y === Math.floor(GRID_SIZE / 2)) {
+                        ctx.fillStyle = COLORS.BROWN;
+                        ctx.fillRect(...rect);
+                    } else {
+                        const pheromoneIntensity = Math.min(255, Math.floor(colony.pheromone[x][y] * 255));
+                        if (pheromoneIntensity > 0) {
+                            ctx.fillStyle = `rgb(${pheromoneIntensity}, 0, ${pheromoneIntensity})`;
+                            ctx.fillRect(...rect);
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawAnts() {
+            const cellSize = Math.min(simulationCanvas.width, simulationCanvas.height) / GRID_SIZE;
+            for (const ant of colony.ants) {
+                ctx.fillStyle = ant.hasFood ? COLORS.BLUE : COLORS.RED;
+                ctx.beginPath();
+                ctx.arc(
+                    ant.x * cellSize + cellSize / 2,
+                    ant.y * cellSize + cellSize / 2,
+                    cellSize / 3,
+                    0,
+                    2 * Math.PI
+                );
+                ctx.fill();
+            }
+        }
+
+        function drawGraph() {
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+            graphCtx.fillStyle = COLORS.WHITE;
+            graphCtx.fillRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+            for (let i = 0; i < FOOD_SOURCES; i++) {
+                const points = foodData[i].map((amount, j) => [
+                    j * graphCanvas.width / maxSteps,
+                    graphCanvas.height - (amount * graphCanvas.height / MAX_FOOD)
+                ]);
+
+                if (points.length > 1) {
+                    graphCtx.strokeStyle = COLORS.FOOD_COLORS[i];
+                    graphCtx.beginPath();
+                    graphCtx.moveTo(...points[0]);
+                    for (let j = 1; j < points.length; j++) {
+                        graphCtx.lineTo(...points[j]);
+                    }
+                    graphCtx.stroke();
+                }
+            }
+        }
+
+        function updateScoreboard() {
+            document.getElementById('episode').textContent = episode;
+            document.getElementById('step').textContent = step;
+            document.getElementById('totalFood').textContent = totalFoodCollected;
+            document.getElementById('totalReward').textContent = colony.agent.totalReward.toFixed(2);
+            document.getElementById('explorationRate').textContent = colony.agent.explorationRate.toFixed(2);
+        }
+
+        function simulationStep() {
+            ctx.clearRect(0, 0, simulationCanvas.width, simulationCanvas.height);
+
+            const foodCollected = colony.update();
+            totalFoodCollected += foodCollected.reduce((a, b) => a + b, 0);
+
+            for (let i = 0; i < FOOD_SOURCES; i++) {
+                foodData[i].push(colony.foodAmounts[i]);
+            }
+
+            drawGrid();
+            drawAnts();
+            drawGraph();
+            updateScoreboard();
+
+            step++;
+
+            if (Object.values(colony.foodAmounts).every(amount => amount <= 0)) {
+                console.log(`Episode ${episode} completed in ${step} steps.`);
+                console.log(`Total food collected: ${totalFoodCollected}`);
+                console.log(`Total reward: ${colony.agent.totalReward.toFixed(2)}`);
+                console.log(`Exploration rate: ${colony.agent.explorationRate.toFixed(2)}`);
+                console.log("---");
+
+                colony.resetFoodLocations();
+                foodData = Array.from({ length: FOOD_SOURCES }, () => []);
+                step = 0;
+                episode++;
+                totalFoodCollected = 0;
+
+                if (episode > 5) {
+                    console.log("Simulation completed.");
+                    return;
+                }
+            }
+
+            setTimeout(simulationStep, 1000 / FPS);
+        }
+
+        // function startSimulation() {
+        //     resizeCanvas();
+        //     simulationStep();
+        // }
+
+        // Modify the startSimulation function
+        async function startSimulation() {
+            resizeCanvas();
+
+            try {
+                // Load Q-table
+                const qTable = await loadQTable();
+                console.log("Q-table loaded successfully");
+
+                // Initialize AntColony with the loaded Q-table
+                colony = new AntColony(qTable);
+                console.log("AntColony initialized with loaded Q-table");
+
+                // Start the simulation loop
+                simulationStep();
+            } catch (error) {
+                console.error("Error starting simulation:", error);
+            }
+        }
+
+        // Modify the simulationStep function to use the global colony variable
+        function simulationStep() {
+            ctx.clearRect(0, 0, simulationCanvas.width, simulationCanvas.height);
+
+            const foodCollected = colony.update();
+            totalFoodCollected += foodCollected.reduce((a, b) => a + b, 0);
+
+            for (let i = 0; i < FOOD_SOURCES; i++) {
+                foodData[i].push(colony.foodAmounts[i]);
+            }
+
+            drawGrid();
+            drawAnts();
+            drawGraph();
+            updateScoreboard();
+
+            step++;
+
+            if (Object.values(colony.foodAmounts).every(amount => amount <= 0)) {
+                console.log(`Episode ${episode} completed in ${step} steps.`);
+                console.log(`Total food collected: ${totalFoodCollected}`);
+                console.log(`Total reward: ${colony.agent.totalReward.toFixed(2)}`);
+                console.log(`Exploration rate: ${colony.agent.explorationRate.toFixed(2)}`);
+                console.log("---");
+
+                colony.resetFoodLocations();
+                foodData = Array.from({ length: FOOD_SOURCES }, () => []);
+                step = 0;
+                episode++;
+                totalFoodCollected = 0;
+
+                if (episode > 5) {
+                    console.log("Simulation completed.");
+                    return;
+                }
+            }
+
+            setTimeout(simulationStep, 1000 / FPS);
+        }
+
+        // Remove the duplicate startSimulation call
+        window.addEventListener('resize', resizeCanvas);
+        startSimulation();
+    </script>
+</body>
+
+</html>
