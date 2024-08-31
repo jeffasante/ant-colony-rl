@@ -1,7 +1,9 @@
 # Ant Colony Reinforcement Learning Simulation
 
 ## Overview
-This project implements an interactive simulation of an ant colony using advanced reinforcement learning techniques. The simulation demonstrates how a colony of ants can learn to efficiently collect food and return it to their nest, adapting their behavior over time through a sophisticated Q-learning algorithm.
+This project implements an interactive simulation of an ant colony using advanced reinforcement learning techniques, inspired by the [NetLogo Ants model](https://ccl.northwestern.edu/netlogo/models/Ants). The simulation demonstrates how a colony of ants can learn to efficiently collect food and return it to their nest, adapting their behavior over time through a sophisticated Q-learning algorithm, enhancing their foraging behavior.
+
+
 
 ![Ant Colony Simulation](assets/simulation-components.png)
 
