@@ -116,7 +116,6 @@ This Ant Colony Reinforcement Learning Simulation has several practical applicat
 - Incorporate different types of ants with specialized roles.
 - Implement comparison modes between different learning algorithms.
 
-This Ant Colony Reinforcement Learning simulation provides an engaging and interactive way to explore the principles of machine learning and swarm intelligence, offering insights into both artificial intelligence and biological systems.
 
 ## Demo
 Experience the simulation firsthand: <a href="https://jeffasante.github.io/ant-colony-rl/" target="_blank">Ant Colony RL Demo</a>
