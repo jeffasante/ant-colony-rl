@@ -1,8 +1,25 @@
-# Ant Colony Reinforcement Learning Simulation
+# Ant Colony Simulation with Reinforcement Learning
+
 
 ## Overview
-This project implements an interactive simulation of an ant colony using advanced reinforcement learning techniques, inspired by the [NetLogo Ants model](https://ccl.northwestern.edu/netlogo/models/Ants). The simulation demonstrates how a colony of ants can learn to efficiently collect food and return it to their nest, adapting their behavior over time through a sophisticated Q-learning algorithm, enhancing their foraging behavior.
+TThis project presents an **interactive simulation** of an ant colony, leveraging advanced **reinforcement learning** techniques. The model draws inspiration from the well-known [NetLogo Ants model](https://ccl.northwestern.edu/netlogo/models/Ants), illustrating how a colony of ants can **adapt their foraging behavior** over time.
 
+Through the use of a sophisticated **Q-learning algorithm**, the ants learn to efficiently:
+
+- **Search for food** scattered across their environment.
+- **Navigate obstacles** and optimize paths to food sources.
+- **Return food to their nest**, enhancing the colony's survival.
+
+### Swarm Intelligence
+
+The simulation emphasizes **swarm intelligence**—a form of collective learning and decision-making based on decentralized, self-organized systems. This type of intelligence is seen in nature with:
+
+- **Flocks of birds**, coordinating in unison.
+- **Schools of fish**, reacting collectively to predators.
+
+In the same way, the ants in this simulation **communicate indirectly** and **adapt** without centralized control, making individual decisions that result in complex, group-wide behaviors.
+
+By applying **reinforcement learning** to these self-organizing behaviors, the project explores how simple agents can work together to solve complex problems, offering insights into **swarm intelligence** and its applications.
 
 
 ![Ant Colony Simulation](assets/simulation-components.png)
